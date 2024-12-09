@@ -30,24 +30,11 @@ namespace SplashLib
         {
         }
 
-        public static SplashWindow Current
-        {
-            get
-            {
-                if (_current == null)
-                {
-                    _current = new SplashWindow();
-                }
-                return _current;
-            }
-        }
+        public static SplashWindow Current => _current ??= new SplashWindow();
 
         public Image? Image
         {
-            get
-            {
-                return _image;
-            }
+            get => _image;
 
             set
             {
@@ -62,32 +49,24 @@ namespace SplashLib
 
         public int MinimumDuration
         {
-            get
-            {
-                return _minimumDuration;
-            }
+            get => _minimumDuration;
 
             set
             {
-                if (value < 0)
-                {
-                    throw new ArgumentOutOfRangeException();
-                }
+                ArgumentOutOfRangeException.ThrowIfNegative(value);
 
                 if (_hwnd != IntPtr.Zero)
                 {
                     throw new InvalidOperationException();
                 }
+
                 _minimumDuration = value;
             }
         }
 
         public bool ShowShadow
         {
-            get
-            {
-                return _showShadow;
-            }
+            get => _showShadow;
 
             set
             {
@@ -95,16 +74,14 @@ namespace SplashLib
                 {
                     throw new InvalidOperationException();
                 }
+
                 _showShadow = value;
             }
         }
 
         public Color TransparencyKey
         {
-            get
-            {
-                return _transparencyKey;
-            }
+            get => _transparencyKey;
 
             set
             {
@@ -118,12 +95,10 @@ namespace SplashLib
 
         private bool CreateNativeWindow()
         {
-            bool result = false;
+            var result = false;
 
-            int style = WS_VISIBLE | WS_POPUP;
-            int exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
-            int left;
-            int top;
+            const int style = WS_VISIBLE | WS_POPUP;
+            var exStyle = WS_EX_TOOLWINDOW | WS_EX_TOPMOST;
 
             if ((_transparencyKey.IsEmpty == false) && IsLayeringSupported())
             {
@@ -139,8 +114,8 @@ namespace SplashLib
             var screenRect = new Rectangle(info.rcMonitor.left, info.rcMonitor.top,
                 info.rcMonitor.right - info.rcMonitor.left, info.rcMonitor.bottom - info.rcMonitor.top);
 
-            left = Math.Max(screenRect.X, screenRect.X + (screenRect.Width - _width) / 2);
-            top = Math.Max(screenRect.Y, screenRect.Y + (screenRect.Height - _height) / 2);
+            var left = Math.Max(screenRect.X, screenRect.X + (screenRect.Width - _width) / 2);
+            var top = Math.Max(screenRect.Y, screenRect.Y + (screenRect.Height - _height) / 2);
 
             _hwnd = CreateWindowEx(exStyle, WindowClassName, "", style, left, top, _width, _height, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
             if (_hwnd != IntPtr.Zero)
@@ -171,19 +146,21 @@ namespace SplashLib
 
         private bool RegisterWindowClass()
         {
-            bool result = false;
+            var result = false;
 
-            WNDCLASS wc = new WNDCLASS();
-            wc.style = 0;
-            wc.lpfnWndProc = this.WndProc;
-            wc.hInstance = GetModuleHandle(null);
-            wc.hbrBackground = (COLOR_WINDOW + 1);
-            wc.lpszClassName = WindowClassName;
-            wc.cbClsExtra = 0;
-            wc.cbWndExtra = 0;
-            wc.hIcon = IntPtr.Zero;
-            wc.hCursor = IntPtr.Zero;
-            wc.lpszMenuName = null;
+            var wc = new WNDCLASS
+            {
+                style = 0,
+                lpfnWndProc = this.WndProc,
+                hInstance = GetModuleHandle(null),
+                hbrBackground = (COLOR_WINDOW + 1),
+                lpszClassName = WindowClassName,
+                cbClsExtra = 0,
+                cbWndExtra = 0,
+                hIcon = IntPtr.Zero,
+                hCursor = IntPtr.Zero,
+                lpszMenuName = null
+            };
 
             if (_showShadow && IsDropShadowSupported())
             {
@@ -207,8 +184,10 @@ namespace SplashLib
         {
             if (_hwnd == IntPtr.Zero)
             {
-                Thread thread = new Thread(SplashWindow.ThreadFunction);
-                thread.Name = ThreadName;
+                var thread = new Thread(SplashWindow.ThreadFunction)
+                {
+                    Name = ThreadName
+                };
                 thread.SetApartmentState(ApartmentState.STA);
                 thread.Start();
                 thread.IsBackground = true;
@@ -219,7 +198,7 @@ namespace SplashLib
         {
             if (_current != null)
             {
-                bool result = _current.RegisterWindowClass();
+                var result = _current.RegisterWindowClass();
                 if (result)
                 {
                     result = _current.CreateNativeWindow();
@@ -227,11 +206,11 @@ namespace SplashLib
 
                 if (result)
                 {
-                    MSG msg = new MSG();
+                    var msg = new MSG();
                     while (GetMessage(ref msg, IntPtr.Zero, 0, 0))
                     {
                         TranslateMessage(ref msg);
-                        DispatchMessage(ref msg);
+                        _ = DispatchMessage(ref msg);
                     }
 
                     _current._hwnd = IntPtr.Zero;
@@ -246,7 +225,7 @@ namespace SplashLib
                 case WM_CREATE:
                     if ((_transparencyKey.IsEmpty == false) && IsLayeringSupported())
                     {
-                        SetLayeredWindowAttributes(hwnd, ColorTranslator.ToWin32(_transparencyKey), 0, LWA_COLORKEY);
+                        _ = SetLayeredWindowAttributes(hwnd, ColorTranslator.ToWin32(_transparencyKey), 0, LWA_COLORKEY);
                     }
 
                     if (_minimumDuration > 0)
@@ -261,12 +240,12 @@ namespace SplashLib
                     return 1;
                 case WM_PAINT:
                     {
-                        PAINTSTRUCT ps = new PAINTSTRUCT();
-                        IntPtr hdc = BeginPaint(hwnd, ref ps);
+                        var ps = new PAINTSTRUCT();
+                        var hdc = BeginPaint(hwnd, ref ps);
 
                         if (hdc != IntPtr.Zero)
                         {
-                            Graphics g = Graphics.FromHdcInternal(hdc);
+                            using var g = Graphics.FromHdcInternal(hdc);
                             if (_image != null)
                             {
                                 g.DrawImage(_image, 0, 0, _width, _height);
@@ -274,9 +253,9 @@ namespace SplashLib
 
                             if (_customizer != null)
                             {
-                                _customizer(new SplashScreenSurface(g, new Rectangle(0, 0, _width - 1, _height - 1)));
+                                _customizer(
+                                    new SplashScreenSurface(g, new Rectangle(0, 0, _width - 1, _height - 1)));
                             }
-                            g.Dispose();
                         }
 
                         EndPaint(hwnd, ref ps);
@@ -289,7 +268,7 @@ namespace SplashLib
 
                     if (_waitingForTimer)
                     {
-                        PostMessage(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
+                        _ = PostMessage(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero);
                     }
                     return 0;
             }
@@ -469,8 +448,8 @@ namespace SplashLib
             // ReSharper disable UnusedMember.Local
             public int cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
 
-            public RECT rcMonitor = new RECT();
-            public RECT rcWork = new RECT();
+            public RECT rcMonitor = new();
+            public RECT rcWork = new();
             public int dwFlags = 0;
 
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
