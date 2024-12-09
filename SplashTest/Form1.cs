@@ -22,7 +22,7 @@ namespace SplashTest
             if (_firstActivated)
             {
                 _firstActivated = false;
-                SplashWindow.Current.Hide(this);
+                SplashWindow.Current.Hide();
             }
         }
     }

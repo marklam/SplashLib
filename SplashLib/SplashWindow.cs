@@ -1,8 +1,5 @@
-using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Windows.Forms;
 
 namespace SplashLib
 {
@@ -11,7 +8,7 @@ namespace SplashLib
         private const string ThreadName = "SplashThread";
         private const string WindowClassName = "SplashWindow";
 
-        private static SplashWindow current;
+        private static SplashWindow? current;
         private Image _image;
         private int _width;
         private int _height;
@@ -23,7 +20,6 @@ namespace SplashLib
         private bool _minimumDurationComplete;
         private bool _waitingForTimer;
         private int _timer;
-        private Form _formToActivate;
 
         private SplashWindow()
         {
@@ -126,8 +122,14 @@ namespace SplashLib
                 exStyle |= WS_EX_LAYERED;
             }
 
-            Screen desktop = Screen.FromPoint(Control.MousePosition);
-            Rectangle screenRect = desktop.WorkingArea;
+            GetCursorPos(out var cursor);
+            var monitor = MonitorFromPoint(cursor, MonitorDefault.MONITOR_DEFAULTTOPRIMARY);
+
+            var info = new MONITORINFOEX();
+            GetMonitorInfo(new HandleRef(null, monitor), info);
+
+            var screenRect = new Rectangle(info.rcMonitor.left, info.rcMonitor.top,
+                info.rcMonitor.right - info.rcMonitor.left, info.rcMonitor.bottom - info.rcMonitor.top);
 
             left = Math.Max(screenRect.X, screenRect.X + (screenRect.Width - _width) / 2);
             top = Math.Max(screenRect.Y, screenRect.Y + (screenRect.Height - _height) / 2);
@@ -143,9 +145,8 @@ namespace SplashLib
             return result;
         }
 
-        public void Hide(Form formToActivate)
+        public void Hide()
         {
-            _formToActivate = formToActivate;
             if (_minimumDuration > 0)
             {
                 _waitingForTimer = true;
@@ -226,11 +227,6 @@ namespace SplashLib
                 }
 
                 current._hwnd = IntPtr.Zero;
-                if (current._formToActivate != null)
-                {
-                    current._formToActivate.Invoke(new MethodInvoker(current._formToActivate.Activate));
-                    current._formToActivate = null;
-                }
             }
         }
 
@@ -313,6 +309,13 @@ namespace SplashLib
         private const int SW_SHOWNORMAL = 1;
         private const int LWA_COLORKEY = 0x00000001;
 
+        public enum MonitorDefault
+        {
+            MONITOR_DEFAULTTONEAREST = 0x00000002,
+            MONITOR_DEFAULTTONULL = 0x00000000,
+            MONITOR_DEFAULTTOPRIMARY = 0x00000001
+        }
+
         [DllImport("user32.dll", ExactSpelling = true, CharSet = CharSet.Auto)]
         private static extern IntPtr BeginPaint(IntPtr hWnd, [In, Out] ref PAINTSTRUCT lpPaint);
 
@@ -370,6 +373,15 @@ namespace SplashLib
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern bool UpdateWindow(IntPtr hWnd);
 
+        [DllImport("user32.dll", CharSet = CharSet.Auto, ExactSpelling = true)]
+        private static extern bool GetCursorPos(out POINT lpPoint);
+
+        [DllImport("user32.dll", ExactSpelling = true)]
+        private static extern IntPtr MonitorFromPoint(POINT pt, MonitorDefault flags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool GetMonitorInfo(HandleRef hmonitor, [In][Out] MONITORINFOEX info);
+
         [ComVisible(true), StructLayout(LayoutKind.Sequential)]
         private struct MSG
         {
@@ -398,7 +410,19 @@ namespace SplashLib
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct RECT
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+
+            public static implicit operator Point(POINT point)
+            {
+                return new Point(point.X, point.Y);
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct RECT
         {
             public int left;
             public int top;
@@ -438,6 +462,19 @@ namespace SplashLib
             public int reserved6;
             public int reserved7;
             public int reserved8;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto, Pack = 4)]
+        private class MONITORINFOEX
+        {
+            internal int cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+
+            internal RECT rcMonitor = new RECT();
+            internal RECT rcWork = new RECT();
+            internal int dwFlags = 0;
+
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
+            internal char[] szDevice = new char[32];
         }
 
         private delegate int WNDPROC(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
