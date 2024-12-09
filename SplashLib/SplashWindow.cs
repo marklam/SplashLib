@@ -1,20 +1,25 @@
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Runtime.Versioning;
 
 namespace SplashLib
 {
+    // ReSharper disable IdentifierTypo
+    // ReSharper disable InconsistentNaming
+
+    [SupportedOSPlatform("windows")]
     public class SplashWindow : MarshalByRefObject
     {
         private const string ThreadName = "SplashThread";
         private const string WindowClassName = "SplashWindow";
 
-        private static SplashWindow? current;
-        private Image _image;
+        private static SplashWindow? _current;
+        private Image? _image;
         private int _width;
         private int _height;
         private Color _transparencyKey;
         private bool _showShadow;
-        private SplashScreenCustomizerEventHandler _customizer;
+        private SplashScreenCustomizerEventHandler? _customizer;
         private IntPtr _hwnd;
         private int _minimumDuration;
         private bool _minimumDurationComplete;
@@ -29,15 +34,15 @@ namespace SplashLib
         {
             get
             {
-                if (current == null)
+                if (_current == null)
                 {
-                    current = new SplashWindow();
+                    _current = new SplashWindow();
                 }
-                return current;
+                return _current;
             }
         }
 
-        public Image Image
+        public Image? Image
         {
             get
             {
@@ -47,8 +52,11 @@ namespace SplashLib
             set
             {
                 _image = value;
-                _width = _image.Width;
-                _height = _image.Height;
+                if (_image != null)
+                {
+                    _width = _image.Width;
+                    _height = _image.Height;
+                }
             }
         }
 
@@ -134,7 +142,7 @@ namespace SplashLib
             left = Math.Max(screenRect.X, screenRect.X + (screenRect.Width - _width) / 2);
             top = Math.Max(screenRect.Y, screenRect.Y + (screenRect.Height - _height) / 2);
 
-            _hwnd = CreateWindowEx(exStyle, WindowClassName, "", style, left, top, _width, _height, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), null);
+            _hwnd = CreateWindowEx(exStyle, WindowClassName, "", style, left, top, _width, _height, IntPtr.Zero, IntPtr.Zero, GetModuleHandle(null), IntPtr.Zero);
             if (_hwnd != IntPtr.Zero)
             {
                 ShowWindow(_hwnd, SW_SHOWNORMAL);
@@ -161,17 +169,15 @@ namespace SplashLib
             }
         }
 
-        private static WNDPROC WindowProcedure;
-
         private bool RegisterWindowClass()
         {
             bool result = false;
 
             WNDCLASS wc = new WNDCLASS();
             wc.style = 0;
-            wc.lpfnWndProc = WindowProcedure = this.WndProc;
+            wc.lpfnWndProc = this.WndProc;
             wc.hInstance = GetModuleHandle(null);
-            wc.hbrBackground = (IntPtr)(COLOR_WINDOW + 1);
+            wc.hbrBackground = (COLOR_WINDOW + 1);
             wc.lpszClassName = WindowClassName;
             wc.cbClsExtra = 0;
             wc.cbWndExtra = 0;
@@ -211,22 +217,25 @@ namespace SplashLib
 
         private static void ThreadFunction()
         {
-            bool result = current.RegisterWindowClass();
-            if (result)
+            if (_current != null)
             {
-                result = current.CreateNativeWindow();
-            }
-
-            if (result)
-            {
-                MSG msg = new MSG();
-                while (GetMessage(ref msg, IntPtr.Zero, 0, 0))
+                bool result = _current.RegisterWindowClass();
+                if (result)
                 {
-                    TranslateMessage(ref msg);
-                    DispatchMessage(ref msg);
+                    result = _current.CreateNativeWindow();
                 }
 
-                current._hwnd = IntPtr.Zero;
+                if (result)
+                {
+                    MSG msg = new MSG();
+                    while (GetMessage(ref msg, IntPtr.Zero, 0, 0))
+                    {
+                        TranslateMessage(ref msg);
+                        DispatchMessage(ref msg);
+                    }
+
+                    _current._hwnd = IntPtr.Zero;
+                }
             }
         }
 
@@ -258,7 +267,11 @@ namespace SplashLib
                         if (hdc != IntPtr.Zero)
                         {
                             Graphics g = Graphics.FromHdcInternal(hdc);
-                            g.DrawImage(_image, 0, 0, _width, _height);
+                            if (_image != null)
+                            {
+                                g.DrawImage(_image, 0, 0, _width, _height);
+                            }
+
                             if (_customizer != null)
                             {
                                 _customizer(new SplashScreenSurface(g, new Rectangle(0, 0, _width - 1, _height - 1)));
@@ -311,8 +324,6 @@ namespace SplashLib
 
         public enum MonitorDefault
         {
-            MONITOR_DEFAULTTONEAREST = 0x00000002,
-            MONITOR_DEFAULTTONULL = 0x00000000,
             MONITOR_DEFAULTTOPRIMARY = 0x00000001
         }
 
@@ -323,13 +334,10 @@ namespace SplashLib
         private static extern bool EndPaint(IntPtr hWnd, ref PAINTSTRUCT lpPaint);
 
         [DllImport("user32.dll", EntryPoint = "CreateWindowEx", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr CreateWindowEx(int dwExStyle, string lpszClassName, string lpszWindowName, int style, int x, int y, int width, int height, IntPtr hWndParent, IntPtr hMenu, IntPtr hInst, [MarshalAs(UnmanagedType.AsAny)] object pvParam);
+        private static extern IntPtr CreateWindowEx(int dwExStyle, string lpszClassName, string lpszWindowName, int style, int x, int y, int width, int height, IntPtr hWndParent, IntPtr hMenu, IntPtr hInst, [MarshalAs(UnmanagedType.IUnknown)] object pvParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int DefWindowProc(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll", ExactSpelling = true, CharSet = CharSet.Auto)]
-        private static extern bool DestroyWindow(IntPtr hWnd);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int DispatchMessage(ref MSG msg);
@@ -338,13 +346,10 @@ namespace SplashLib
         private static extern bool GetMessage(ref MSG msg, IntPtr hwnd, int minFilter, int maxFilter);
 
         [DllImport("kernel32", CharSet = CharSet.Auto)]
-        private static extern IntPtr GetModuleHandle(string modName);
+        private static extern IntPtr GetModuleHandle(string? modName);
 
         [DllImport("user32.dll", ExactSpelling = true, CharSet = CharSet.Auto)]
         private static extern bool KillTimer(IntPtr hwnd, int idEvent);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto)]
-        private static extern bool PeekMessage([In, Out] ref MSG msg, IntPtr hwnd, int msgMin, int msgMax, int remove);
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int PostMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
@@ -357,9 +362,6 @@ namespace SplashLib
 
         [DllImport("user32.dll", CharSet = CharSet.Auto)]
         private static extern int SetLayeredWindowAttributes(IntPtr hwnd, int color, byte alpha, int flags);
-
-        [DllImport("user32.dll")]
-        private static extern int SetParent(IntPtr hWndChild, IntPtr hWndNewParent);
 
         [DllImport("user32.dll", ExactSpelling = true, CharSet = CharSet.Auto)]
         private static extern int SetTimer(IntPtr hWnd, int nIDEvent, int uElapse, IntPtr lpTimerFunc);
@@ -398,15 +400,15 @@ namespace SplashLib
         private class WNDCLASS
         {
             public int style;
-            public WNDPROC lpfnWndProc;
+            public WNDPROC? lpfnWndProc;
             public int cbClsExtra;
             public int cbWndExtra;
             public IntPtr hInstance;
             public IntPtr hIcon;
             public IntPtr hCursor;
             public IntPtr hbrBackground;
-            public string lpszMenuName;
-            public string lpszClassName;
+            public string? lpszMenuName;
+            public string? lpszClassName;
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -436,11 +438,6 @@ namespace SplashLib
                 this.right = right;
                 this.bottom = bottom;
             }
-
-            internal static RECT FromXYWH(int x, int y, int width, int height)
-            {
-                return new RECT(x, y, x + width, y + height);
-            }
         }
 
         [StructLayout(LayoutKind.Sequential)]
@@ -464,18 +461,22 @@ namespace SplashLib
             public int reserved8;
         }
 
+#pragma warning disable CS0414 // Field is assigned but its value is never used
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto, Pack = 4)]
         private class MONITORINFOEX
         {
-            internal int cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+            // ReSharper disable FieldCanBeMadeReadOnly.Local
+            // ReSharper disable UnusedMember.Local
+            public int cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
 
-            internal RECT rcMonitor = new RECT();
-            internal RECT rcWork = new RECT();
-            internal int dwFlags = 0;
+            public RECT rcMonitor = new RECT();
+            public RECT rcWork = new RECT();
+            public int dwFlags = 0;
 
             [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)]
-            internal char[] szDevice = new char[32];
+            public char[] szDevice = new char[32];
         }
+#pragma warning restore CS0414 // Field is assigned but its value is never used
 
         private delegate int WNDPROC(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
     }
