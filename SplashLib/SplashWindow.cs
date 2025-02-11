@@ -199,6 +199,8 @@ namespace SplashLib
         {
             if (_current != null)
             {
+                SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
+
                 var result = _current.RegisterWindowClass();
                 if (result)
                 {
@@ -450,5 +452,10 @@ namespace SplashLib
 
         [UnmanagedFunctionPointer(CallingConvention.Winapi)]
         private delegate IntPtr WindowProc([In] IntPtr hwnd, [In] uint uMsg, [In] IntPtr wParam, [In] IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr SetThreadDpiAwarenessContext(IntPtr dpiContext);
+
+        private static readonly IntPtr DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 = new IntPtr(-4);
     }
 }
